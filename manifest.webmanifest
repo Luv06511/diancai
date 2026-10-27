@@ -1,0 +1,17 @@
+{
+  "name": "小厨房 · 私人菜单",
+  "short_name": "点菜",
+  "description": "私人用的点菜本：按分类挑菜、下单、生成采购清单",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbf6ef",
+  "theme_color": "#d64b2f",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
