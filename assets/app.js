@@ -839,6 +839,16 @@
     });
   }
 
+  function utf8ToBase64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+
   async function exportData() {
     toast('正在打包备份…');
     const photos = {};
@@ -850,13 +860,25 @@
       }
     }
     const payload = Object.assign({}, db, { _photos: photos });
+    const text = JSON.stringify(payload, null, 2);
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const d = new Date();
-    const stamp = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const now = new Date();
+    const stamp = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+    const name = '点菜备份-' + stamp + '.json';
+
+    // 安装包（Android 外壳）里没有下载目录权限，走原生保存对话框
+    if (window.DiancaiNative && window.DiancaiNative.exportBackup) {
+      try {
+        window.DiancaiNative.exportBackup(name, utf8ToBase64(text));
+        toast('选个位置保存（含 ' + Object.keys(photos).length + ' 张照片）');
+        return;
+      } catch (e) { /* 落回网页下载 */ }
+    }
+
+    const blob = new Blob([text], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = '点菜备份-' + stamp + '.json';
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1143,7 +1165,7 @@
   /* ================= 启动 ================= */
   render(false);
 
-  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0 && location.hostname !== 'app.local') {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').catch(() => { /* 局域网 http 下不可用，无妨 */ });
     });
