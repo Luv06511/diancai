@@ -4,3 +4,5 @@ Thumbs.db
 
 download/
 *.apk
+__pycache__/
+*.pyc
