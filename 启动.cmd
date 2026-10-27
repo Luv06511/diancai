@@ -3,7 +3,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title 点菜 · 私人菜单
 
-set "PY=C:\Users\cxk\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe"
+set "PY=%USERPROFILE%\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe"
 if not exist "%PY%" set "PY="
 
 if not defined PY (
