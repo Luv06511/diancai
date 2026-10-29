@@ -1,4 +1,4 @@
-/* 点菜 · 私人菜单 —— 单文件应用逻辑（无依赖） */
+/* 小饭桌 —— 两个人一起吃的单文件应用（无依赖） */
 (function () {
   'use strict';
 
@@ -12,10 +12,6 @@
   ));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-  const money = (n) => {
-    const v = Math.round((Number(n) || 0) * 100) / 100;
-    return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, '');
-  };
 
   function fmtTime(ts) {
     const d = new Date(ts);
@@ -32,16 +28,15 @@
     menu: '<path d="M3.4 11.3h17.2c0 4.8-3.8 8.7-8.6 8.7s-8.6-3.9-8.6-8.7z"/>',
     orders: '<path d="M6 3.8h12v16.4l-3-2-3 2-3-2-3 2z"/><path d="M9.2 8.5h5.6M9.2 12.4h5.6"/>',
     manage: '<path d="M9 6.8h11M9 12h11M9 17.2h11"/><circle cx="4.8" cy="6.8" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="17.2" r="1.1" fill="currentColor" stroke="none"/>',
-    me: '<path d="M4 7.5h7M16.5 7.5H20M4 16.5h3.5M13 16.5h7"/><circle cx="13.8" cy="7.5" r="2.3"/><circle cx="9.8" cy="16.5" r="2.3"/>'
+    heart: '<path d="M12 20.2c-.4 0-.8-.15-1.1-.42C7.3 16.6 3.6 13.3 3.6 9.7c0-2.5 1.9-4.4 4.3-4.4 1.5 0 2.9.75 3.7 1.95.8-1.2 2.2-1.95 3.7-1.95 2.4 0 4.3 1.9 4.3 4.4 0 3.6-3.7 6.9-7.3 10.08-.3.27-.7.42-1.1.42z"/>'
   };
   const svg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
   /* ================= 数据 ================= */
   function defaultData() {
     return {
-      v: 1,
-      shop: '小厨房',
-      showPrice: true,
+      v: 2,
+      shop: '小饭桌',
       seq: 0,
       note: '',
       cats: DISH_CATS.slice(),
@@ -83,7 +78,7 @@
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(db));
     } catch (e) {
-      toast('保存失败：浏览器存储空间可能满了');
+      toast('存不下啦，空间可能满了');
     }
   }
 
@@ -121,7 +116,7 @@
       photoCache.set(id, URL.createObjectURL(blob));
       return true;
     } catch (e) {
-      toast('图片保存失败，可能不支持本地存储');
+      toast('照片没存上，可能不支持本地存储');
       return false;
     }
   }
@@ -199,17 +194,13 @@
   /* ================= 状态 ================= */
   const ui = { tab: 'menu', cat: '全部' };
   let sheet = null;      // {type:'cart'} | {type:'dish',id} | {type:'edit'} | {type:'shopping',id}
-  let draft = null;      // 正在编辑的菜
+  let draft = null;
 
   /* ================= 选择器 ================= */
   const dishById = (id) => db.dishes.find((d) => d.id === id);
   const cartLine = (id) => db.cart.find((c) => c.id === id);
   const cartQty = (id) => (cartLine(id) || {}).qty || 0;
   const cartCount = () => db.cart.reduce((s, c) => s + c.qty, 0);
-  const cartTotal = () => db.cart.reduce((s, c) => {
-    const d = dishById(c.id);
-    return s + (d ? (Number(d.price) || 0) * c.qty : 0);
-  }, 0);
 
   /* ================= 渲染：外壳 ================= */
   function render(keepScroll) {
@@ -227,17 +218,17 @@
   function renderTop() {
     const n = cartCount();
     $('#topbar').innerHTML =
-      '<div class="brand"><h1>' + esc(db.shop) + '</h1><span class="tag">私人菜单</span></div>' +
-      '<button class="cart-btn" data-act="open-cart" aria-label="购物车">' + svg('bag') +
+      '<div class="brand"><h1>' + esc(db.shop) + '</h1><span class="tag">两个人一起</span></div>' +
+      '<button class="cart-btn" data-act="open-cart" aria-label="想吃清单">' + svg('bag') +
       '<span class="badge"' + (n ? '' : ' hidden') + '>' + n + '</span></button>';
   }
 
   function renderTabbar() {
     const tabs = [
-      ['menu', '点菜', 'menu'],
-      ['orders', '订单', 'orders'],
-      ['manage', '菜单', 'manage'],
-      ['me', '设置', 'me']
+      ['menu', '想吃', 'menu'],
+      ['orders', '记录', 'orders'],
+      ['manage', '菜谱', 'manage'],
+      ['me', '我们', 'heart']
     ];
     $('#tabbar').innerHTML = tabs.map((t) =>
       '<button class="tab' + (ui.tab === t[0] ? ' active' : '') + '" data-act="tab" data-tab="' + t[0] + '">' +
@@ -248,15 +239,11 @@
   function renderCartBar() {
     const wrap = $('#cartbar-wrap');
     if (!db.cart.length) { wrap.innerHTML = ''; return; }
-    const n = cartCount();
     wrap.innerHTML =
       '<div class="cartbar">' +
-      '<div class="cb-left">' +
-      (db.showPrice
-        ? '<span class="cb-count">' + n + ' 件</span><span class="cb-total"><small>¥</small>' + money(cartTotal()) + '</span>'
-        : '<span class="cb-total" style="font-size:16px">' + n + ' 件</span>') +
-      '</div>' +
-      '<button class="cb-btn" data-act="open-cart">去下单</button></div>';
+      '<div class="cb-left"><span class="cb-emoji">🧺</span>' +
+      '<span class="cb-total">' + cartCount() + ' 个菜</span></div>' +
+      '<button class="cb-btn" data-act="open-cart">定啦</button></div>';
   }
 
   function renderView() {
@@ -275,14 +262,13 @@
       '</div>';
   }
 
-  /* ================= 视图：点菜 ================= */
+  /* ================= 视图：想吃 ================= */
   function menuView() {
-    if (!db.dishes.length) return emptyBlock('🍽️', '菜单还是空的', '去「菜单」里加几道菜吧', 'tab', '去加菜');
+    if (!db.dishes.length) return emptyBlock('🍽️', '菜谱本还空着', '先去「菜谱」加几道爱吃的吧', 'tab', '去加菜');
 
     const counts = {};
     db.dishes.forEach((d) => { counts[d.cat] = (counts[d.cat] || 0) + 1; });
     const cats = ['全部'].concat(db.cats.filter((c) => counts[c]));
-    // 分类条里没有的菜（历史数据）兜底
     db.dishes.forEach((d) => { if (cats.indexOf(d.cat) < 0) cats.push(d.cat); });
 
     const chips = cats.map((c) => {
@@ -300,13 +286,14 @@
     }).join('');
 
     return '<div class="hero">' +
-      '<p class="hero-kicker">TODAY · 私人菜单</p>' +
-      '<h2 class="hero-title">点什么，<br>我做什么。</h2>' +
-      '<p class="hero-sub">' + db.dishes.length + ' 道菜 · 挑好了就下单</p>' +
-      '<button class="hero-dice" data-act="lucky">🎲 帮我配一桌</button>' +
+      '<div class="hero-hearts"><span>🤍</span><span>💗</span><span>🤍</span></div>' +
+      '<p class="hero-kicker">今天也要好好吃饭</p>' +
+      '<h2 class="hero-title">今天想吃<br>什么呀？</h2>' +
+      '<p class="hero-sub">' + db.dishes.length + ' 道菜 · 挑中了就告诉我</p>' +
+      '<button class="hero-dice" data-act="lucky">🎲 随便配一桌</button>' +
       '</div>' +
       '<div class="catbar"><div class="catbar-inner">' + chips + '</div></div>' +
-      (sections || emptyBlock('🍳', '这个分类还没有菜', '去「菜单」里加一道'));
+      (sections || emptyBlock('🍳', '这个分类还没有菜', '去「菜谱」里加一道'));
   }
 
   function dishCard(d) {
@@ -318,25 +305,24 @@
         '<span class="emoji">' + esc(d.emoji || '🍽️') + '</span>' +
       '</div>' +
       '<div class="dish-main">' +
-        '<div class="dish-title"><h3>' + esc(d.name) + '</h3>' + (d.off ? '<span class="soldout">售罄</span>' : '') + '</div>' +
+        '<div class="dish-title"><h3>' + esc(d.name) + '</h3>' + (d.off ? '<span class="soldout">歇一天</span>' : '') + '</div>' +
         (d.desc ? '<p class="dish-desc">' + esc(d.desc) + '</p>' : '') +
         '<div class="dish-meta">' +
-          (db.showPrice && d.price ? '<span class="price">¥' + money(d.price) + '</span>' : '') +
           (d.minutes ? '<span class="mins">' + d.minutes + ' 分钟</span>' : '') +
           tags +
         '</div>' +
       '</div>' +
       '<div class="dish-act">' +
         (q ? '<span class="qbadge">' + q + '</span>' : '') +
-        '<button class="add" data-act="add" data-id="' + d.id + '"' + (d.off ? ' disabled' : '') + ' aria-label="加入">+</button>' +
+        '<button class="add" data-act="add" data-id="' + d.id + '"' + (d.off ? ' disabled' : '') + ' aria-label="加入想吃">+</button>' +
       '</div>' +
     '</article>';
   }
 
-  /* ================= 视图：订单 ================= */
+  /* ================= 视图：记录 ================= */
   function ordersView() {
-    if (!db.orders.length) return emptyBlock('🧾', '还没有订单', '回「点菜」挑几道，下单后这里会记下来');
-    const head = '<div class="page-head"><h2>我的订单</h2><span>' + db.orders.length + ' 单</span></div>';
+    if (!db.orders.length) return emptyBlock('💌', '还没有投喂记录', '去「想吃」挑几道，做完就会记在这里');
+    const head = '<div class="page-head"><h2>投喂记录</h2><span>' + db.orders.length + ' 顿</span></div>';
     return head + '<div class="orders">' + db.orders.map(orderCard).join('') + '</div>';
   }
 
@@ -349,83 +335,79 @@
       (it.note ? '<span class="oi-note">备注：' + esc(it.note) + '</span>' : '') +
       '</li>'
     ).join('');
+    const count = o.items.reduce((s, i) => s + i.qty, 0);
 
     return '<article class="order">' +
       '<div class="order-head">' +
-        '<span class="order-no">#' + String(o.no).padStart(3, '0') + '</span>' +
+        '<span class="order-no">第 ' + o.no + ' 顿</span>' +
         '<span class="order-time">' + fmtTime(o.at) + '</span>' +
-        '<span class="badge-status ' + (done ? 'done' : 'todo') + '">' + (done ? '已完成' : '待做') + '</span>' +
+        '<span class="badge-status ' + (done ? 'done' : 'todo') + '">' + (done ? '吃过啦' : '等你做') + '</span>' +
       '</div>' +
       '<ul class="order-items">' + items + '</ul>' +
-      (o.note ? '<p class="order-note">整单备注：' + esc(o.note) + '</p>' : '') +
+      (o.note ? '<p class="order-note">小纸条：' + esc(o.note) + '</p>' : '') +
       '<div class="order-foot">' +
-        (db.showPrice
-          ? '<span class="order-total">合计<b>¥' + money(o.total) + '</b></span>'
-          : '<span class="order-total">共 ' + o.items.reduce((s, i) => s + i.qty, 0) + ' 件</span>') +
+        '<span class="order-total">一共 ' + count + ' 个菜</span>' +
         '<button class="mini ' + (done ? '' : 'green') + '" data-act="done" data-id="' + o.id + '">' +
-          (done ? '撤回' : '做好了') + '</button>' +
+          (done ? '撤回' : '做好啦') + '</button>' +
       '</div>' +
       '<div class="order-acts">' +
-        '<button class="link-btn" data-act="shopping" data-id="' + o.id + '">🧺 采购清单</button>' +
-        '<button class="link-btn" data-act="reorder" data-id="' + o.id + '">🔁 再来一单</button>' +
+        '<button class="link-btn" data-act="shopping" data-id="' + o.id + '">🧺 买菜清单</button>' +
+        '<button class="link-btn" data-act="reorder" data-id="' + o.id + '">🔁 再做一次</button>' +
         '<button class="link-btn" data-act="del-order" data-id="' + o.id + '">删除</button>' +
       '</div>' +
     '</article>';
   }
 
-  /* ================= 视图：菜单管理 ================= */
+  /* ================= 视图：菜谱 ================= */
   function manageView() {
     const rows = db.dishes.map((d) =>
       '<div class="mrow' + (d.off ? ' off' : '') + '">' +
         '<div class="m-emoji">' + esc(d.emoji || '🍽️') + '</div>' +
         '<div class="m-main"><div class="m-name">' + esc(d.name) + '</div>' +
-          '<div class="m-sub">' + esc(d.cat) + (d.minutes ? ' · ' + d.minutes + ' 分钟' : '') +
-          (db.showPrice && d.price ? ' · ¥' + money(d.price) : '') + '</div></div>' +
+          '<div class="m-sub">' + esc(d.cat) + (d.minutes ? ' · ' + d.minutes + ' 分钟' : '') + '</div></div>' +
         '<div class="m-acts">' +
-          '<button class="mini" data-act="toggle-off" data-id="' + d.id + '">' + (d.off ? '上架' : '下架') + '</button>' +
+          '<button class="mini" data-act="toggle-off" data-id="' + d.id + '">' + (d.off ? '叫回来' : '歇一天') + '</button>' +
           '<button class="mini accent" data-act="edit-dish" data-id="' + d.id + '">编辑</button>' +
         '</div>' +
       '</div>'
     ).join('');
 
-    return '<div class="page-head"><h2>菜单管理</h2><span>' + db.dishes.length + ' 道</span></div>' +
-      '<p class="tip">「下架」的菜不出现在点菜页，但记录还在，随时可以再上架。</p>' +
+    return '<div class="page-head"><h2>菜谱本</h2><span>' + db.dishes.length + ' 道</span></div>' +
+      '<p class="tip">「歇一天」的菜先不出现在想吃里，随时可以叫回来～</p>' +
       '<div class="mlist">' + rows + '</div>' +
-      '<button class="btn primary block big" data-act="new-dish">＋ 新增一道菜</button>';
+      '<button class="btn primary block big" data-act="new-dish">＋ 加一道新菜</button>';
   }
 
-  /* ================= 视图：设置 ================= */
+  /* ================= 视图：我们 ================= */
   function meView() {
     const ordered = {};
     db.orders.forEach((o) => o.items.forEach((it) => { ordered[it.name] = (ordered[it.name] || 0) + it.qty; }));
     const top = Object.keys(ordered).sort((a, b) => ordered[b] - ordered[a])[0];
 
-    return '<div class="page-head"><h2>设置</h2></div>' +
+    return '<div class="page-head"><h2>我们</h2></div>' +
       '<div class="card">' +
-        '<div class="field"><label>菜单名字</label>' +
-          '<input id="shop-name" value="' + esc(db.shop) + '" maxlength="16" placeholder="比如：小厨房">' +
+        '<div class="field"><label>小饭桌名字</label>' +
+          '<input id="shop-name" value="' + esc(db.shop) + '" maxlength="16" placeholder="比如：小饭桌">' +
         '</div>' +
-        '<div class="switch-row"><div><b>显示价格</b><small>关掉之后只看菜和食材</small></div>' +
-          '<label class="switch"><input type="checkbox" id="show-price"' + (db.showPrice ? ' checked' : '') + '><span></span></label>' +
-        '</div>' +
+        '<p class="card-hint">改个你俩喜欢的名字，会出现在最上面～</p>' +
       '</div>' +
       '<div class="card">' +
-        '<h3>统计</h3>' +
+        '<h3>一起吃过的</h3>' +
         '<div class="stat-grid">' +
           '<div class="stat-item"><b>' + db.dishes.length + '</b><span>道菜</span></div>' +
-          '<div class="stat-item"><b>' + db.orders.length + '</b><span>个订单</span></div>' +
-          '<div class="stat-item"><b style="font-size:15px;line-height:1.9">' + esc(top || '—') + '</b><span>点得最多</span></div>' +
+          '<div class="stat-item"><b>' + db.orders.length + '</b><span>顿饭</span></div>' +
+          '<div class="stat-item"><b style="font-size:15px;line-height:1.9">' + esc(top || '—') + '</b><span>最常吃</span></div>' +
         '</div>' +
       '</div>' +
       '<div class="card">' +
         '<h3>数据</h3>' +
-        '<button class="btn ghost block" data-act="export">导出备份（JSON）</button>' +
-        '<button class="btn ghost block" data-act="import">从备份恢复</button>' +
-        '<button class="btn ghost block" data-act="reset-seed">恢复示例菜单</button>' +
-        '<button class="btn danger block" data-act="wipe">清空全部数据</button>' +
+        '<button class="btn ghost block" data-act="export">导出备份</button>' +
+        '<button class="btn ghost block" data-act="import">从备份回来</button>' +
+        '<button class="btn ghost block" data-act="reset-seed">恢复示例菜谱</button>' +
+        '<button class="btn danger block" data-act="wipe">清空所有</button>' +
         '<input type="file" id="import-file" accept=".json,application/json" hidden>' +
       '</div>' +
-      '<p class="foot-note">数据只存在这台设备的浏览器里，不上传任何服务器。<br>换手机或清缓存前，记得先导出备份。</p>';
+      '<p class="foot-note">这些只存在这台手机里，不会上传～<br>换手机之前记得先导出备份呀。</p>';
   }
 
   /* ================= 弹层 ================= */
@@ -491,24 +473,22 @@
     return '';
   }
 
-  /* -------- 购物车 -------- */
+  /* -------- 想吃清单 -------- */
   function cartSheet() {
     if (!db.cart.length) {
-      return sheetHead('购物车') + '<div class="sheet-body"><div class="empty" style="padding:36px 0">' +
-        '<div class="ico">🛒</div><h3>还没点菜</h3><p>回去挑几道喜欢的</p></div></div>';
+      return sheetHead('想吃清单') + '<div class="sheet-body"><div class="empty" style="padding:36px 0">' +
+        '<div class="ico">🧺</div><h3>还没挑菜呢</h3><p>回去看看想吃什么～</p></div></div>';
     }
 
     const lines = db.cart.map((c) => {
       const d = dishById(c.id);
       if (!d) return '';
-      const linePrice = db.showPrice ? '¥' + money((Number(d.price) || 0) * c.qty) : '';
       return '<div class="cart-line">' +
         '<div class="cl-emoji">' + esc(d.emoji || '🍽️') + '</div>' +
         '<div class="cl-main">' +
-          '<div class="cl-top"><span class="cl-name">' + esc(d.name) + '</span>' +
-          (linePrice ? '<span class="cl-price">' + linePrice + '</span>' : '') + '</div>' +
+          '<div class="cl-top"><span class="cl-name">' + esc(d.name) + '</span></div>' +
           '<input class="cl-note" data-note="' + c.id + '" value="' + esc(c.note || '') + '"' +
-            ' placeholder="口味备注，如：少辣、不要葱" maxlength="40" enterkeyhint="done">' +
+            ' placeholder="有什么小要求？比如少辣～" maxlength="40" enterkeyhint="done">' +
         '</div>' +
         '<div class="qty">' +
           '<button data-act="dec" data-id="' + c.id + '" aria-label="减少">−</button>' +
@@ -518,17 +498,15 @@
       '</div>';
     }).join('');
 
-    return sheetHead('购物车', cartCount() + ' 件') +
+    return sheetHead('想吃清单', cartCount() + ' 个') +
       '<div class="sheet-body">' + lines +
-        '<div class="field" style="margin-top:16px"><label>整单备注</label>' +
-        '<input id="order-note" value="' + esc(db.note || '') + '" maxlength="60" placeholder="比如：七点开饭、米饭两碗">' +
+        '<div class="field" style="margin-top:16px"><label>想说的话</label>' +
+        '<input id="order-note" value="' + esc(db.note || '') + '" maxlength="60" placeholder="比如：今天想早点吃～">' +
         '</div>' +
       '</div>' +
       '<div class="sheet-foot">' +
-        (db.showPrice
-          ? '<div class="sum">合计<b>¥' + money(cartTotal()) + '</b></div>'
-          : '<div class="sum">共 ' + cartCount() + ' 件</div>') +
-        '<button class="btn primary" data-act="submit">下单</button>' +
+        '<div class="sum">一共 ' + cartCount() + ' 个菜</div>' +
+        '<button class="btn primary" data-act="submit">就这些！</button>' +
       '</div>';
   }
 
@@ -536,7 +514,7 @@
   function dishSheet(d) {
     const q = cartQty(d.id);
     const ings = (d.ingredients || []).map((x) => '<span>' + esc(x) + '</span>').join('');
-    return sheetHead('菜品详情') +
+    return sheetHead('这道菜') +
       '<div class="sheet-body">' +
         '<div class="dish-hero">' +
           '<div class="big-emoji">' +
@@ -545,19 +523,18 @@
           '</div>' +
           '<div><h2>' + esc(d.name) + '</h2>' +
             (d.desc ? '<p>' + esc(d.desc) + '</p>' : '') +
-            (db.showPrice && d.price ? '<span class="price">¥' + money(d.price) + '</span>' : '') +
           '</div>' +
         '</div>' +
         (d.tags && d.tags.length
           ? '<div class="ing-list" style="margin-bottom:4px">' + d.tags.map((t) => '<span>' + esc(t) + '</span>').join('') + '</div>'
           : '') +
-        (d.minutes ? '<p class="tip">大概需要 ' + d.minutes + ' 分钟</p>' : '') +
-        (ings ? '<div class="block-title">用到的食材</div><div class="ing-list">' + ings + '</div>' : '') +
+        (d.minutes ? '<p class="tip">大概要 ' + d.minutes + ' 分钟</p>' : '') +
+        (ings ? '<div class="block-title">要用到</div><div class="ing-list">' + ings + '</div>' : '') +
       '</div>' +
       '<div class="sheet-foot">' +
-        (q ? '<div class="sum">已在购物车<b style="font-size:15px">×' + q + '</b></div>' : '<div class="sum">现点现做</div>') +
+        (q ? '<div class="sum">已经加过 <b style="font-size:15px">×' + q + '</b></div>' : '<div class="sum">现做现吃</div>') +
         '<button class="btn primary" data-act="add" data-id="' + d.id + '"' + (d.off ? ' disabled' : '') + '>' +
-          (d.off ? '今天售罄' : '加入购物车') + '</button>' +
+          (d.off ? '今天休息' : '加入想吃') + '</button>' +
       '</div>';
   }
 
@@ -565,7 +542,7 @@
   function editorSheet() {
     const d = draft;
     const emojis = ['🍲', '🍗', '🥩', '🍅', '🥬', '🍆', '🌶️', '🍤', '🍚', '🍜', '🥟', '🍄', '🥔', '🧊', '🍋', '🥤'];
-    return sheetHead(d.isNew ? '新增一道菜' : '编辑菜品') +
+    return sheetHead(d.isNew ? '加一道新菜' : '改改这道菜') +
       '<form class="sheet-body" id="dish-form" autocomplete="off" onsubmit="return false">' +
         '<div class="photo-row">' +
           '<div class="photo-preview">' +
@@ -575,19 +552,16 @@
           '<div class="photo-acts">' +
             '<label class="btn ghost small">选张照片<input type="file" id="dish-photo" accept="image/*" hidden></label>' +
             (d.photo ? '<button type="button" class="btn ghost small" data-act="clear-photo">移除</button>'
-                     : '<small class="hint">不传照片就用表情代替</small>') +
+                     : '<small class="hint">不传就用表情代替</small>') +
           '</div>' +
         '</div>' +
-        '<div class="field"><label>菜名</label><input name="name" value="' + esc(d.name) + '" placeholder="例如：番茄炒蛋" maxlength="20"></div>' +
-        '<div class="field"><label>分类</label><input name="cat" value="' + esc(d.cat) + '" list="cat-options" maxlength="8" placeholder="热菜">' +
+        '<div class="field"><label>叫什么</label><input name="name" value="' + esc(d.name) + '" placeholder="比如：番茄炒蛋" maxlength="20"></div>' +
+        '<div class="field"><label>归到哪一类</label><input name="cat" value="' + esc(d.cat) + '" list="cat-options" maxlength="8" placeholder="热炒">' +
           '<datalist id="cat-options">' + db.cats.map((c) => '<option value="' + esc(c) + '">').join('') + '</datalist></div>' +
-        '<div class="field"><label>一句话介绍</label><input name="desc" value="' + esc(d.desc || '') + '" placeholder="例如：汤汁拌饭一绝" maxlength="40"></div>' +
-        '<div class="field-row">' +
-          '<div class="field"><label>价格（元）</label><input name="price" type="number" inputmode="decimal" min="0" step="0.5" value="' + (d.price || '') + '" placeholder="0"></div>' +
-          '<div class="field"><label>耗时（分钟）</label><input name="minutes" type="number" inputmode="numeric" min="0" step="5" value="' + (d.minutes || '') + '" placeholder="20"></div>' +
-        '</div>' +
+        '<div class="field"><label>一句话介绍</label><input name="desc" value="' + esc(d.desc || '') + '" placeholder="比如：汤汁拌饭一绝" maxlength="40"></div>' +
+        '<div class="field"><label>大概要多久（分钟）</label><input name="minutes" type="number" inputmode="numeric" min="0" step="5" value="' + (d.minutes || '') + '" placeholder="20"></div>' +
         '<div class="field"><label>标签</label><input name="tags" value="' + esc((d.tags || []).join('，')) + '" placeholder="下饭，快手，微辣"></div>' +
-        '<div class="field"><label>食材（一行一样，用来生成采购清单）</label>' +
+        '<div class="field"><label>食材（一行一样，买菜清单会用到）</label>' +
           '<textarea name="ingredients" rows="4" placeholder="番茄 2个&#10;鸡蛋 3个&#10;糖 1小勺">' + esc((d.ingredients || []).join('\n')) + '</textarea></div>' +
         '<div class="field"><label>表情</label>' +
           '<input name="emoji" id="emoji-input" value="' + esc(d.emoji || '🍲') + '" maxlength="4" placeholder="🍲">' +
@@ -596,11 +570,11 @@
       '</form>' +
       '<div class="sheet-foot">' +
         (d.isNew ? '' : '<button class="btn ghost" data-act="del-dish">删除</button>') +
-        '<button class="btn primary grow" data-act="save-dish">保存</button>' +
+        '<button class="btn primary grow" data-act="save-dish">存好啦</button>' +
       '</div>';
   }
 
-  /* -------- 采购清单 -------- */
+  /* -------- 买菜清单 -------- */
   function shoppingSheet(o) {
     const checked = new Set(o.shopping || []);
     let total = 0, done = 0;
@@ -614,12 +588,12 @@
           (checked.has(key) ? ' checked' : '') + '><span>' + esc(line) + '</span></label>';
       }).join('');
       return '<div class="shop-group"><div class="shop-head">' + esc(it.emoji || '') + ' ' + esc(it.name) +
-        ' <span>×' + it.qty + '</span></div>' + (lines || '<div class="check-row" style="opacity:.5">这道菜没记食材</div>') + '</div>';
+        ' <span>×' + it.qty + '</span></div>' + (lines || '<div class="check-row" style="opacity:.5">这道菜没写食材</div>') + '</div>';
     }).join('');
 
-    return sheetHead('采购清单', '<span id="shop-count">' + done + '/' + total + '</span>') +
+    return sheetHead('买菜清单', '<span id="shop-count">' + done + '/' + total + '</span>') +
       '<div class="sheet-body">' +
-        '<p class="tip" style="margin:6px 0 2px">照着买就行，买一样勾一样。</p>' + groups +
+        '<p class="tip" style="margin:6px 0 2px">照着买就好，买一样勾一样～</p>' + groups +
       '</div>';
   }
 
@@ -635,7 +609,7 @@
   function addToCart(id, n, silent) {
     const d = dishById(id);
     if (!d) return;
-    if (d.off) { toast('这道菜今天不做了'); return; }
+    if (d.off) { toast('这道菜今天休息啦'); return; }
     const c = cartLine(id);
     if (c) c.qty = clamp(c.qty + (n || 1), 1, 99);
     else db.cart.push({ id: id, qty: 1, note: '' });
@@ -660,7 +634,6 @@
         id: c.id,
         name: d.name,
         emoji: d.emoji,
-        price: Number(d.price) || 0,
         qty: c.qty,
         note: c.note || '',
         ingredients: (d.ingredients || []).slice()
@@ -673,7 +646,6 @@
       at: Date.now(),
       items: items,
       note: db.note || '',
-      total: items.reduce((s, i) => s + i.price * i.qty, 0),
       status: 'todo',
       shopping: []
     });
@@ -683,7 +655,7 @@
     closeSheet();
     ui.tab = 'orders';
     render(false);
-    toast('下单成功，开火 🔥');
+    toast('记下啦，开火咯 🔥');
   }
 
   function mergeOrder(o) {
@@ -697,18 +669,18 @@
     });
     save();
     render(true);
-    toast(added ? '已加入购物车 ' + added + ' 件' : '这些菜已经不在菜单里了');
+    toast(added ? '又加进想吃 ' + added + ' 个菜' : '这些菜已经不在菜谱里了');
   }
 
   function luckyPick() {
     const pool = db.dishes.filter((d) => !d.off);
-    if (!pool.length) { toast('菜单还是空的'); return; }
+    if (!pool.length) { toast('菜谱本还空着呀'); return; }
     const pickFrom = (cats) => {
       const arr = pool.filter((d) => cats.indexOf(d.cat) >= 0);
       return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
     };
     const picks = [];
-    [pickFrom(['招牌', '热菜']), pickFrom(['素菜']), pickFrom(['汤羹']), pickFrom(['主食'])]
+    [pickFrom(['拿手菜', '热炒']), pickFrom(['素菜']), pickFrom(['汤汤']), pickFrom(['主食'])]
       .forEach((d) => { if (d && picks.indexOf(d) < 0) picks.push(d); });
     if (!picks.length) picks.push(pool[Math.floor(Math.random() * pool.length)]);
     picks.forEach((d) => addToCart(d.id, 1, true));
@@ -723,8 +695,8 @@
       draft = Object.assign({}, d, { isNew: false });
     } else {
       draft = {
-        id: 'p' + uid(), isNew: true, name: '', cat: ui.cat === '全部' ? '热菜' : ui.cat,
-        desc: '', emoji: '🍲', price: '', minutes: '', tags: [], ingredients: [], off: false, photo: false
+        id: 'p' + uid(), isNew: true, name: '', cat: ui.cat === '全部' ? '热炒' : ui.cat,
+        desc: '', emoji: '🍲', minutes: '', tags: [], ingredients: [], off: false, photo: false
       };
     }
     openSheet({ type: 'edit' });
@@ -738,18 +710,16 @@
       return el ? el.value : '';
     };
     const name = get('name').trim();
-    if (!name) { toast('先给这道菜起个名字'); return null; }
-    const price = parseFloat(get('price'));
+    if (!name) { toast('先给这道菜起个名字呀'); return null; }
     const minutes = parseInt(get('minutes'), 10);
     const tags = get('tags').split(/[，,、\s]+/).map((s) => s.trim()).filter(Boolean).slice(0, 4);
     const ings = get('ingredients').split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 20);
     return {
       id: draft.id,
       name: name,
-      cat: (get('cat').trim() || '热菜').slice(0, 8),
+      cat: (get('cat').trim() || '热炒').slice(0, 8),
       desc: get('desc').trim().slice(0, 40),
       emoji: (get('emoji').trim() || '🍲').slice(0, 4),
-      price: isFinite(price) && price > 0 ? price : 0,
       minutes: isFinite(minutes) && minutes > 0 ? minutes : 0,
       tags: tags,
       ingredients: ings,
@@ -769,7 +739,6 @@
     draft.name = get('name');
     draft.cat = get('cat');
     draft.desc = get('desc');
-    draft.price = get('price');
     draft.minutes = get('minutes');
     draft.tags = get('tags').split(/[，,、\s]+/).map((s) => s.trim()).filter(Boolean);
     draft.ingredients = get('ingredients').split('\n').map((s) => s.trim()).filter(Boolean);
@@ -787,24 +756,24 @@
     const wasNew = draft.isNew;
     closeSheet();
     render(true);
-    toast(wasNew ? '加进菜单了' : '改好了');
+    toast(wasNew ? '加进菜谱啦' : '改好啦');
   }
 
   function deleteDraft() {
     if (!draft) return;
-    if (!confirm('删除「' + (draft.name || '这道菜') + '」？')) return;
+    if (!confirm('把「' + (draft.name || '这道菜') + '」从菜谱里删掉吗？')) return;
     db.dishes = db.dishes.filter((x) => x.id !== draft.id);
     db.cart = db.cart.filter((x) => x.id !== draft.id);
     photoDel(draft.id);
     writeNow();
     closeSheet();
     render(true);
-    toast('已删除');
+    toast('删掉啦');
   }
 
   async function pickPhoto(file) {
     if (!file || !draft) return;
-    if (!/^image\//.test(file.type)) { toast('请选择图片文件'); return; }
+    if (!/^image\//.test(file.type)) { toast('选一张图片呀'); return; }
     const targetId = draft.id;
     try {
       const blob = await compressImage(file, 880, 0.78);
@@ -864,9 +833,8 @@
 
     const now = new Date();
     const stamp = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
-    const name = '点菜备份-' + stamp + '.json';
+    const name = '饭饭备份-' + stamp + '.json';
 
-    // 安装包（Android 外壳）里没有下载目录权限，走原生保存对话框
     if (window.DiancaiNative && window.DiancaiNative.exportBackup) {
       try {
         window.DiancaiNative.exportBackup(name, utf8ToBase64(text));
@@ -883,7 +851,7 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    toast('备份已导出（含 ' + Object.keys(photos).length + ' 张照片）');
+    toast('备份打包好啦（含 ' + Object.keys(photos).length + ' 张照片）');
   }
 
   async function restorePhotos(map) {
@@ -905,19 +873,18 @@
       let data = null;
       try { data = JSON.parse(String(reader.result)); } catch (e) { data = null; }
       if (!data || !Array.isArray(data.dishes) || !data.dishes.length) {
-        toast('这个文件不是有效的备份');
+        toast('这个文件不是备份呀');
         return;
       }
-      if (!confirm('用备份覆盖当前菜单和订单？（现在是 ' + db.dishes.length + ' 道菜）')) return;
+      if (!confirm('用备份覆盖现在的菜谱和记录吗？（现在有 ' + db.dishes.length + ' 道菜）')) return;
 
       const next = defaultData();
-      next.shop = typeof data.shop === 'string' && data.shop.trim() ? data.shop.trim().slice(0, 16) : '小厨房';
-      next.showPrice = data.showPrice !== false;
+      next.shop = typeof data.shop === 'string' && data.shop.trim() ? data.shop.trim().slice(0, 16) : '小饭桌';
       next.note = '';
       next.cart = [];
       next.cats = Array.isArray(data.cats) && data.cats.length ? data.cats.slice() : DISH_CATS.slice();
       next.dishes = data.dishes.map((x) => Object.assign(
-        { id: 'i' + uid(), name: '未命名', cat: '热菜', emoji: '🍽️', desc: '', price: 0, minutes: 0, tags: [], ingredients: [], off: false, photo: false },
+        { id: 'i' + uid(), name: '未命名', cat: '热炒', emoji: '🍽️', desc: '', minutes: 0, tags: [], ingredients: [], off: false, photo: false },
         x
       ));
       next.dishes.forEach((x) => {
@@ -932,7 +899,7 @@
       writeNow();
       closeSheet();
       render(false);
-      toast('已从备份恢复');
+      toast('从备份回来啦');
       restorePhotos(data._photos);
     };
     reader.readAsText(file);
@@ -967,7 +934,7 @@
       case 'add': {
         const inSheet = !!el.closest('.sheet');
         addToCart(id, 1, false);
-        if (inSheet) { closeSheet(); toast('已加入购物车'); }
+        if (inSheet) { closeSheet(); toast('加进想吃啦 💗'); }
         break;
       }
 
@@ -993,7 +960,7 @@
           o.status = o.status === 'done' ? 'todo' : 'done';
           writeNow();
           render(true);
-          toast(o.status === 'done' ? '这桌吃上了 🍚' : '已改回待做');
+          toast(o.status === 'done' ? '这顿吃上啦 🍚' : '改回等你做啦');
         }
         break;
       }
@@ -1010,7 +977,7 @@
 
       case 'del-order': {
         const o = db.orders.find((x) => x.id === id);
-        if (o && confirm('删除订单 #' + String(o.no).padStart(3, '0') + '？')) {
+        if (o && confirm('删掉「第 ' + o.no + ' 顿」的记录吗？')) {
           db.orders = db.orders.filter((x) => x.id !== id);
           writeNow();
           render(true);
@@ -1060,7 +1027,7 @@
           d.off = !d.off;
           writeNow();
           render(true);
-          toast(d.off ? '已下架：' + d.name : '已上架：' + d.name);
+          toast(d.off ? '先歇一天：' + d.name : '叫回来啦：' + d.name);
         }
         break;
       }
@@ -1080,24 +1047,24 @@
       }
 
       case 'reset-seed':
-        if (confirm('把菜单换回示例的 36 道菜？你自己加的菜会被覆盖（订单不受影响）。')) {
+        if (confirm('把菜谱换回示例的 36 道菜？你自己加的那些会被覆盖（记录不受影响）。')) {
           db.dishes = SEED_DISHES.map((d) => Object.assign({}, d));
           db.cats = DISH_CATS.slice();
           db.cart = db.cart.filter((c) => db.dishes.some((d) => d.id === c.id));
           writeNow();
           render(false);
-          toast('菜单已恢复成示例');
+          toast('菜谱恢复成示例啦');
         }
         break;
 
       case 'wipe':
-        if (confirm('清空所有菜品、订单、照片和设置？这个操作不能撤销。')) {
+        if (confirm('清空所有菜、记录、照片和设置？这个不能撤销哦。')) {
           localStorage.removeItem(LS_KEY);
           photoClearAll();
           db = defaultData();
           writeNow();
           render(false);
-          toast('已清空');
+          toast('清空啦，重新开始～');
         }
         break;
 
@@ -1116,7 +1083,7 @@
     }
     if (t.id === 'order-note') { db.note = t.value.slice(0, 60); save(); return; }
     if (t.id === 'shop-name') {
-      db.shop = t.value.slice(0, 16) || '小厨房';
+      db.shop = t.value.slice(0, 16) || '小饭桌';
       const h = $('.brand h1');
       if (h) h.textContent = db.shop;
       save();
@@ -1126,13 +1093,6 @@
   document.addEventListener('change', (e) => {
     const t = e.target;
     if (!t) return;
-
-    if (t.id === 'show-price') {
-      db.showPrice = !!t.checked;
-      writeNow();
-      render(true);
-      return;
-    }
 
     if (t.id === 'dish-photo' && t.files && t.files[0]) {
       pickPhoto(t.files[0]);

@@ -1,5 +1,5 @@
 /* 离线缓存：联网时走网络（改完文件刷新就生效），断网时用缓存 */
-const CACHE = 'diancai-v2';
+const CACHE = 'diancai-v3';
 const ASSETS = [
   './',
   './index.html',
