@@ -33,6 +33,9 @@
   const svg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
   /* ================= 数据 ================= */
+  const CAT_MAP = { '招牌': '拿手菜', '热菜': '热炒', '汤羹': '汤汤', '凉菜': '小凉菜', '饮品': '喝的' };
+  const catName = (c) => (CAT_MAP[c] || c);
+
   function defaultData() {
     return {
       v: 2,
@@ -52,13 +55,15 @@
     if (!raw || !Array.isArray(raw.dishes) || !raw.dishes.length) return defaultData();
 
     const d = Object.assign(defaultData(), raw);
-    d.cats = Array.isArray(raw.cats) && raw.cats.length ? raw.cats.slice() : DISH_CATS.slice();
+    d.cats = (Array.isArray(raw.cats) && raw.cats.length ? raw.cats.slice() : DISH_CATS.slice()).map(catName);
     d.dishes.forEach((x) => {
       if (!x.id) x.id = uid();
       if (!Array.isArray(x.tags)) x.tags = [];
       if (!Array.isArray(x.ingredients)) x.ingredients = [];
+      if (x.cat) x.cat = catName(x.cat);
       if (x.cat && d.cats.indexOf(x.cat) < 0) d.cats.push(x.cat);
     });
+    d.cats = d.cats.filter((c, i) => d.cats.indexOf(c) === i);
     d.cart = (Array.isArray(raw.cart) ? raw.cart : []).filter((c) =>
       d.dishes.some((x) => x.id === c.id) && c.qty > 0
     );
@@ -882,7 +887,7 @@
       next.shop = typeof data.shop === 'string' && data.shop.trim() ? data.shop.trim().slice(0, 16) : '小饭桌';
       next.note = '';
       next.cart = [];
-      next.cats = Array.isArray(data.cats) && data.cats.length ? data.cats.slice() : DISH_CATS.slice();
+      next.cats = Array.isArray(data.cats) && data.cats.length ? data.cats.slice().map(catName) : DISH_CATS.slice();
       next.dishes = data.dishes.map((x) => Object.assign(
         { id: 'i' + uid(), name: '未命名', cat: '热炒', emoji: '🍽️', desc: '', minutes: 0, tags: [], ingredients: [], off: false, photo: false },
         x
@@ -890,8 +895,10 @@
       next.dishes.forEach((x) => {
         if (!Array.isArray(x.tags)) x.tags = [];
         if (!Array.isArray(x.ingredients)) x.ingredients = [];
+        if (x.cat) x.cat = catName(x.cat);
         if (x.cat && next.cats.indexOf(x.cat) < 0) next.cats.push(x.cat);
       });
+      next.cats = next.cats.filter((c, i) => next.cats.indexOf(c) === i);
       next.orders = Array.isArray(data.orders) ? data.orders : [];
       const maxNo = next.orders.reduce((m, o) => Math.max(m, Number(o.no) || 0), 0);
       next.seq = Math.max(Number(data.seq) || 0, maxNo);
